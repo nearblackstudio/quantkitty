@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from . import hl, model as M
+from . import hl, model as M, execution as EX
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -107,8 +107,10 @@ def main():
         log["notes"].append(f"Gross exposure capped from {gross:.2f}x to {D['gross_cap']}x.")
 
     # ---------------- trader: paper book at mainnet prices
-    cost_rate = lambda c: M.TAKER + (0.0002 if P.ADV[c].iloc[-1] >= 500e6 else 0.0004 if P.ADV[c].iloc[-1] >= 50e6 else 0.0010) \
+    taker_rate = lambda c: M.TAKER + (0.0002 if P.ADV[c].iloc[-1] >= 500e6 else 0.0004 if P.ADV[c].iloc[-1] >= 50e6 else 0.0010) \
         if c in P.ADV else M.TAKER + 0.0010
+    cost_ratio = EX.paper_cost_ratio(st)              # measured testnet execution vs the taker model (1.0 until 30 fills)
+    cost_rate = lambda c: taker_rate(c) * cost_ratio
     coins = sorted(set(target.index) | set(pb["positions"]))
     sgn = lambda x: (x > 0) - (x < 0)
     for c in coins:
@@ -173,29 +175,30 @@ def main():
             from eth_account import Account
             from hyperliquid.exchange import Exchange
             ex = Exchange(Account.from_key(os.environ["HL_AGENT_KEY"]), hl.TESTNET, account_address=acct)
+        deltas, reduce_only = {}, {}
         for c in sorted(set(want) | set(tn_pos)):
-            cur_n = tn_pos.get(c, {}).get("szi", 0) * tmids.get(c, 0)
+            if c not in tmids or c not in szd:
+                continue
+            cur_q = tn_pos.get(c, {}).get("szi", 0.0); cur_n = cur_q * tmids[c]
             w_n = want.get(c, 0.0)
             flip = cur_n and w_n and (cur_n > 0) != (w_n > 0)
             if not flip and abs(w_n - cur_n) < max(D["testnet_min_order_usd"], 0.3 * abs(w_n)):
                 continue
-            o = {"coin": c, "from_usd": round(cur_n, 2), "to_usd": round(w_n, 2)}
-            if ex:
-                try:
-                    if cur_n and (flip or w_n == 0 or abs(w_n) < abs(cur_n)):
-                        r = ex.market_close(c, slippage=0.01); o["close"] = r.get("status")
-                        cur_n = 0
-                    if w_n:
-                        sz = round(abs(w_n - cur_n) / tmids[c], szd[c])
-                        if sz * tmids[c] >= 10:
-                            r = ex.market_open(c, (w_n - cur_n) > 0, sz, None, 0.01)
-                            st_ = r.get("response", {}).get("data", {}).get("statuses", [{}])[0] if r.get("status") == "ok" else r
-                            o["open"] = "error: " + str(st_["error"]) if isinstance(st_, dict) and "error" in st_ else r.get("status")
-                except Exception as e:
-                    o["error"] = str(e); log["errors"].append(f"testnet {c}: {e}")
-            tn["orders"].append(o)
-        if ex and tn["orders"]:
-            time.sleep(2); tn["equity"], tn["positions"] = hl.account(acct)
+            deltas[c] = w_n / tmids[c] - cur_q
+            reduce_only[c] = (w_n == 0)
+            tn["orders"].append({"coin": c, "from_usd": round(cur_n, 2), "to_usd": round(w_n, 2)})
+        if ex and deltas:
+            t0 = int(time.time() * 1000) - 1000
+            recs = EX.rebalance(ex, acct, deltas, szd, reduce_only, log)
+            by = {r["coin"]: r for r in recs}
+            for o in tn["orders"]:
+                o.update({k: v for k, v in by.get(o["coin"], {}).items() if k != "coin"})
+            time.sleep(3)
+            m = EX.measure(acct, t0, tmids, taker_rate)
+            tn["execution"] = {k: round(v, 4) for k, v in m.items()}
+            e = EX.update_stats(st, m)
+            tn["execution_total"] = {k: round(v, 4) for k, v in e.items()}
+            tn["equity"], tn["positions"] = hl.account(acct)
 
     # ---------------- ledger records
     st["last_run_ms"] = now_ms
@@ -206,6 +209,11 @@ def main():
     msg = (f"Paper equity {eq:,.0f} (peak {pb['peak']:,.0f}); {len(pb['positions'])} positions, gross {target.abs().sum():.2f}x; "
            f"{len(log['orders'])} paper rebalances, {len(log['trades'])} closed; universe {len(eligible)} coins; "
            f"testnet {tn['equity'] if tn['equity'] is None else round(tn['equity'], 2)} with {len(tn['orders'])} orders.")
+    if tn.get("execution", {}).get("notional"):
+        m = tn["execution"]; tot = tn["execution_total"]
+        msg += (f" Execution: {m['maker_notional'] / m['notional']:.0%} filled as maker, cost {1e4 * m['cost_usd'] / m['notional']:.1f} bp"
+                f" vs {1e4 * m['modelled_usd'] / m['notional']:.1f} bp modelled; {tot['fills']:.0f} fills measured so far,"
+                f" paper cost multiplier {cost_ratio:.2f}.")
     if log["notes"]: msg += " " + " ".join(log["notes"][:4])
     if log["errors"]: msg += " Errors: " + " | ".join(log["errors"][:4])
     json.dump({"ts": now.isoformat(timespec="seconds"), "status": status, "message": msg, "network": "testnet"},
@@ -216,7 +224,9 @@ def main():
                              for c, p in pb["positions"].items()},
                "targets": {c: round(float(w), 4) for c, w in top.head(40).items()},
                "sleeve_weights": {k: round(float(wts[k].iloc[-1]), 3) for k in wts},
-               "universe": eligible, "testnet": {"equity": tn["equity"], "positions": tn["positions"], "orders": tn["orders"]}},
+               "universe": eligible, "paper_cost_multiplier": round(cost_ratio, 3),
+               "testnet": {"equity": tn["equity"], "positions": tn["positions"], "orders": tn["orders"],
+                           "execution": tn.get("execution"), "execution_total": tn.get("execution_total")}},
               open(f"{L}/snapshot_{sid}.json", "w"), default=float)
     for t in log["trades"]:
         json.dump(t, open(f"{L}/trade_{t['coin']}_{t['exit_t']}.json", "w"))
