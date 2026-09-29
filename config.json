@@ -1,0 +1,57 @@
+{
+  "desk": {
+    "vol_target": 0.25,
+    "leverage_cap_book": 3.0,
+    "gross_cap": 2.5,
+    "coin_cap": 0.25,
+    "rebalance_hour_utc": 0,
+    "universe": {
+      "top_n": 40,
+      "min_adv_usd": 3000000,
+      "min_age_bars": 540
+    },
+    "paper_start_equity": 10000,
+    "testnet_min_order_usd": 11,
+    "testnet_mirror_top": 4
+  },
+  "risk": {
+    "daily_loss_limit": -0.06,
+    "weekly_loss_limit": -0.12,
+    "soft_drawdown": 0.8,
+    "soft_recover": 0.9,
+    "hard_drawdown": 0.65,
+    "max_venue_divergence": 0.02,
+    "max_data_age_hours": 8
+  },
+  "sleeves": [
+    {
+      "name": "trend",
+      "family": "tsmom",
+      "params": {
+        "lookbacks": [
+          42,
+          84,
+          180,
+          360
+        ]
+      },
+      "status": "live",
+      "since": "2026-09-29"
+    },
+    {
+      "name": "xsmom",
+      "family": "xs_mom",
+      "params": {
+        "lookbacks": [
+          48,
+          72,
+          96
+        ],
+        "hold": 42,
+        "tranches": 3
+      },
+      "status": "live",
+      "since": "2026-09-29"
+    }
+  ]
+}

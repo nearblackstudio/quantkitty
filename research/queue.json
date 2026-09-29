@@ -1,0 +1,16 @@
+[
+  {"id": "breakout_20d", "family": "donchian", "params": {"n": 120},
+   "rationale": "Channel breakout is the classic turtle-style trend rule; it enters later but holds winners longer than the moving-average ensemble."},
+  {"id": "breakout_60d", "family": "donchian", "params": {"n": 360},
+   "rationale": "Slower breakout for multi-month trends; fewer trades, lower costs."},
+  {"id": "low_vol_30d", "family": "low_vol", "params": {"lookback": 180, "hold": 42},
+   "rationale": "The low-volatility anomaly is one of the most persistent equity factors; in crypto, the wildest alts tend to underperform after costs."},
+  {"id": "beta_hedged_mom", "family": "beta_hedged_mom", "params": {"lookbacks": [48, 72, 96], "hold": 42},
+   "rationale": "Momentum measured after removing each coin's BTC beta isolates coin-specific strength and may be less exposed to market crashes."},
+  {"id": "xs_mom_fast", "family": "xs_mom", "params": {"lookbacks": [24, 36, 48], "hold": 42, "tranches": 3},
+   "rationale": "Shorter-horizon cross-sectional momentum (4 to 8 days) to test whether the momentum edge extends to faster signals."},
+  {"id": "trend_slow", "family": "tsmom", "params": {"lookbacks": [180, 360, 720]},
+   "rationale": "Slower trend ensemble (1 to 4 months) that trades less and may diversify the current trend sleeve."},
+  {"id": "xs_mom_concentrated", "family": "xs_mom", "params": {"lookbacks": [48, 72, 96], "hold": 42, "tranches": 3, "q": 0.1},
+   "rationale": "Top and bottom 10% only: a stronger but noisier momentum signal."}
+]
