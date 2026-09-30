@@ -32,8 +32,9 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--state"); ap.add_argument("--flags"); ap.add_argument("--out", required=True)
     ap.add_argument("--execute", action="store_true")
+    ap.add_argument("--config", default=os.path.join(ROOT, "config.json"))
     a = ap.parse_args()
-    cfg = json.load(open(os.path.join(ROOT, "config.json")))
+    cfg = json.load(open(a.config))
     D, RK = cfg["desk"], cfg["risk"]
     st = load(a.state, {}); flags = load(a.flags, {})
     now = datetime.now(timezone.utc); now_ms = int(now.timestamp() * 1000)

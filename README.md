@@ -6,7 +6,7 @@ The full rationale, evidence and risk rules are in the **QuantKitty Prop Playboo
 
 ## How it runs
 
-Every 4 hours a scheduled Claude task clones this repo and runs `bin/cycle.sh`:
+Every 4 hours a scheduled Claude task downloads this repo (read-only) and runs `bin/cycle.sh`. The live strategy config and research queue are stored in the dashboard's database, not in this repo; `config.json` and `research/queue.json` here are only the starting copies.
 
 | Role | Code | What it does |
 | --- | --- | --- |
@@ -23,8 +23,9 @@ Results are written to the QuantKitty Desk dashboard (a Claude artifact with a s
 ## Rules the agents follow
 
 - No agent edits code in `quantkitty/`. Strategies are combinations of the families in `model.LIBRARY`.
-- The research run may add a sleeve to `config.json` only as `probation` (half risk), and only after passing all gates on two cycles at least 24 hours apart. Probation becomes live after 30 days if the last 90 days are profitable; sleeves losing over 90 days are retired.
-- The Claude researcher may append new hypotheses to `research/queue.json` (existing families, new parameters, with a rationale).
+- The research run may add a sleeve to the live config only as `probation` (half risk), and only after passing all gates on two cycles at least 24 hours apart. Probation becomes live after 30 days if the last 90 days are profitable; sleeves losing over 90 days are retired.
+- The Claude researcher may append new hypotheses to the queue in the database (existing families, new parameters, with a rationale).
+- Scheduled runs never write to this repo.
 - Secrets never live in this repo.
 
 ## Local use

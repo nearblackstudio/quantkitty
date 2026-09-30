@@ -62,8 +62,10 @@ def neighbours(spec):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--state"); ap.add_argument("--out", required=True)
+    ap.add_argument("--config", default=os.path.join(ROOT, "config.json"))
+    ap.add_argument("--queue", default=os.path.join(ROOT, "research", "queue.json"))
     a = ap.parse_args()
-    cfg_path = os.path.join(ROOT, "config.json"); q_path = os.path.join(ROOT, "research", "queue.json")
+    cfg_path, q_path = a.config, a.queue
     cfg = json.load(open(cfg_path)); queue = json.load(open(q_path))
     st = {}
     if a.state and os.path.exists(a.state):
@@ -140,6 +142,11 @@ def main():
     result["config_changed"] = config_changed
     if config_changed:
         json.dump(cfg, open(cfg_path, "w"), indent=2)
+    # the ledger database is the source of truth for config and queue; always hand both back
+    json.dump({"config": cfg, "updated": now.isoformat(timespec="seconds")},
+              open(os.path.join(a.out, "ledger", "system_config.json"), "w"), indent=1)
+    json.dump({"queue": queue, "updated": now.isoformat(timespec="seconds")},
+              open(os.path.join(a.out, "ledger", "system_queue.json"), "w"), indent=1)
     sid = now.strftime("%Y%m%dT%H%MZ")
     json.dump(result, open(os.path.join(a.out, "ledger", f"research_{sid}.json"), "w"), default=float)
     json.dump({"state": json.dumps(st), "updated": now.isoformat(timespec="seconds")},
